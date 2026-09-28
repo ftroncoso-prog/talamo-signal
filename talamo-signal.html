@@ -458,6 +458,19 @@ tbody tr.is-hit { animation:hitPulse 1.1s ease; }
    además del resaltado transitorio de hover (.sect-bar-row.active). */
 .sect-bar-row.huella-selected { background:rgba(181,226,250,0.14); box-shadow:inset 3px 0 0 var(--celeste); }
 
+/* Botones "Ver impacto total..." bajo el mapa y bajo el ranking de #huella —
+   alternan entre la vista por sector/provincia fija y el agregado de todos
+   los sectores/todas las provincias (ver toggleHuellaMapTotal/SectTotal). */
+.huella-total-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  align-self:center; margin-top:16px;
+  background:transparent; border:1.5px solid var(--teal);
+  color:var(--celeste); font-size:0.76rem; font-weight:700; font-family:inherit;
+  padding:9px 18px; border-radius:7px; transition:all 0.18s; cursor:pointer;
+}
+.huella-total-btn:hover { background:var(--teal); color:var(--hueso); }
+.huella-total-btn.is-active { background:var(--teal); color:var(--hueso); }
+
 /* Pop-up de solicitud (formulario) — se abre desde la ficha, por encima de todo */
 .lead-ov {
   display:none; position:fixed; inset:0;
@@ -1853,14 +1866,14 @@ footer {
       <div class="expl-map-row">
         <div class="mapa-col">
           <div class="mapa-col-title" id="huellaMapTitle">Impacto en el PIB nacional por provincia</div>
-          <p class="ficha-subcaption">Cambio porcentual en el PIB o el empleo nacional si la productividad del sector elegido aumentara —el mismo shock estandarizado— en cada provincia. La provincia elegida queda destacada; el resto, atenuado. Pase el cursor o haga clic en cualquiera para comparar.</p>
+          <p class="ficha-subcaption">Cambio en el PIB o el empleo nacional si la productividad del sector elegido aumentara —el mismo shock estandarizado— en cada provincia. La provincia elegida queda destacada; el resto, atenuado. Pase el cursor o haga clic en cualquiera para comparar.</p>
           <div class="mapa-body">
             <div class="mapa-panels">
               <div class="mapa-panel-card"><svg id="huellaMapNorte" class="mapa-svg"></svg></div>
               <div class="mapa-panel-card"><svg id="huellaMapSur" class="mapa-svg"></svg></div>
             </div>
             <div class="mapa-legend">
-              <div class="legend-title" id="huellaMapLegendTitle">Impacto en el PIB (%)</div>
+              <div class="legend-title" id="huellaMapLegendTitle">Impacto en el PIB</div>
               <div class="legend-bar-wrap">
                 <span class="legend-val" id="huellaMapLegendMax">–</span>
                 <div class="legend-bar legend-bar-diverging"><span class="legend-zero-tick">0</span></div>
@@ -1868,13 +1881,15 @@ footer {
               </div>
             </div>
           </div>
+          <button type="button" class="huella-total-btn" id="huellaMapTotalBtn" onclick="TalamoSignal.toggleHuellaMapTotal()">Ver impacto total provincia</button>
         </div>
         <div class="mapa-col">
           <div class="mapa-col-title" id="huellaSectListTitle">Impacto en el PIB nacional por sector</div>
-          <p class="ficha-subcaption">Cambio porcentual en el PIB o el empleo nacional si la productividad de la provincia elegida aumentara en cada sector, ordenados de mayor a menor. Pase el cursor o haga clic en cualquiera para comparar.</p>
+          <p class="ficha-subcaption">Cambio en el PIB o el empleo nacional si la productividad de la provincia elegida aumentara en cada sector, ordenados de mayor a menor. Pase el cursor o haga clic en cualquiera para comparar.</p>
           <div class="sect-rank-col">
             <div class="sect-rank-list" id="huellaSectList"></div>
           </div>
+          <button type="button" class="huella-total-btn" id="huellaSectTotalBtn" onclick="TalamoSignal.toggleHuellaSectTotal()">Ver impacto total sector</button>
         </div>
       </div>
     </div>
@@ -1950,7 +1965,7 @@ function talamoFetchJSON(file) {
 }
 
 async function talamoLoadData() {
-  const [emp, map, expl, mip, mul, elast, rank, provSect, regSect] = await Promise.all([
+  const [emp, map, expl, mip, mul, elast, rank, provSect, regSect, regChange, sectChange] = await Promise.all([
     talamoFetchJSON('empresas-ranking.json'),
     talamoFetchJSON('mapa-geo.json'),
     talamoFetchJSON('economia-provincias.json'),
@@ -1960,10 +1975,14 @@ async function talamoLoadData() {
     talamoFetchJSON('ranking_pib.json'),
     talamoFetchJSON('provincias_sectores.json'),
     talamoFetchJSON('regional_sectoral_change.json'),
+    talamoFetchJSON('regional_change.json'),
+    talamoFetchJSON('sectoral_change.json'),
   ]);
   empresas = emp; MAP_DATA = map; EXPL_DATA = expl; MIP_DATA = mip; mults = mul;
   PROV_SECT = provSect;
   REG_SECT_DATA = regSect;
+  REG_DATA = regChange;
+  SECT_DATA = sectChange;
 
   // Cruce por nombre normalizado con elasticidades.json: incorpora el % de
   // cambio en el PIB nacional atribuible a cada empresa al ranking.
@@ -2000,7 +2019,9 @@ const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''
 let MAP_DATA; // cargado desde data/mapa-geo.json
 let EXPL_DATA; // cargado desde data/economia-provincias.json
 let PROV_SECT; // cargado desde data/provincias_sectores.json — { provincias:[{codigo,nombre,region}×56], sectores:[{codigo,nombre,industria}×46] }, misma taxonomía 1..56 / 1..46 de RegionalSectoralChange_AGG_EL.csv
-let REG_SECT_DATA; // cargado desde data/regional_sectoral_change.json — { agdp[2576], al[2576] }: %ΔPIB y %ΔEmpleo NACIONAL al shockear cada celda (contrafactual=Benchmark), índice (cod_ubicacion-1)*46+(cod_sector-1)
+let REG_SECT_DATA; // cargado desde data/regional_sectoral_change.json — { agdp[2576], al[2576] }: AGDP_norm/L_norm (adimensional) al shockear cada celda provincia×sector (contrafactual=Benchmark), índice (cod_ubicacion-1)*46+(cod_sector-1)
+let REG_DATA; // cargado desde data/regional_change.json — { agdp[56], al[56] }: AGDP_norm/L_norm al shockear cada provincia completa (todos los sectores a la vez, contrafactual=Benchmark), índice cod_ubicacion-1
+let SECT_DATA; // cargado desde data/sectoral_change.json — { agdp[46], al[46] }: AGDP_norm/L_norm al shockear cada sector completo (todas las provincias a la vez, contrafactual=Benchmark), índice cod_sector-1
 
 // ═══ EXPLORADOR DE DATOS — mapa coroplético provincial ═══
 const MAPA_VARS = [
@@ -4275,8 +4296,10 @@ document.getElementById('huella').addEventListener('click', ev => {
   if (ev.target === ev.currentTarget || isOverlayBackgroundClick(ev.target)) { cerrarHuella(); return; }
   // Clic dentro de la ficha pero fuera de la provincia/sector seleccionado
   // (cualquier .prov-path o .sect-bar-row ya detuvo la propagación en su
-  // propio handler): oculta ambos tooltips sin cerrar la ficha.
-  if (!ev.target.closest('.prov-path') && !ev.target.closest('.sect-bar-row')) {
+  // propio handler): oculta ambos tooltips sin cerrar la ficha. Los botones
+  // "Ver impacto total..." quedan afuera de esta regla: no deben apagar un
+  // tooltip que su propio click acaba de (re)mostrar.
+  if (!ev.target.closest('.prov-path') && !ev.target.closest('.sect-bar-row') && !ev.target.closest('.huella-total-btn')) {
     huellaMapPin = null; huellaSectPin = null;
     hideHuellaMapTooltip(); hideHuellaSectTooltip();
   }
@@ -4373,13 +4396,15 @@ function calcular() {
   abrirHuella(cu, cs);
 }
 
-let huellaMetric = 'pib';    // 'pib' | 'empleo' -> lee de REG_SECT_DATA.agdp / .al
-let huellaSelProv = null;    // cod_ubicacion (1-56) elegido en el selector
-let huellaSelSect = null;    // cod_sector (1-46) elegido en el selector
-let huellaMapPin = null;     // cod_ubicacion con tooltip de mapa pineado (null = ninguno)
-let huellaSectPin = null;    // cod_sector con tooltip de ranking pineado
-let huellaMapBuilt = false;  // los <path> del mapa se arman una sola vez; sólo el fill/selección cambian
+let huellaMetric = 'pib';        // 'pib' | 'empleo' -> lee de REG_SECT_DATA.agdp / .al (o REG_DATA/SECT_DATA en vista total)
+let huellaSelProv = null;        // cod_ubicacion (1-56) elegido en el selector
+let huellaSelSect = null;        // cod_sector (1-46) elegido en el selector
+let huellaMapPin = null;         // cod_ubicacion con tooltip de mapa pineado (null = ninguno)
+let huellaSectPin = null;        // cod_sector con tooltip de ranking pineado
+let huellaMapBuilt = false;      // los <path> del mapa se arman una sola vez; sólo el fill/selección cambian
 let huellaScrollY = 0;
+let huellaMapTotalView = false;  // false = impacto por provincia a sector fijo (REG_SECT_DATA); true = impacto total de cada provincia, todos los sectores (REG_DATA)
+let huellaSectTotalView = false; // false = impacto por sector a provincia fija (REG_SECT_DATA); true = impacto total de cada sector, todas las provincias (SECT_DATA)
 
 const HUELLA_METRICS = { pib: { arr: 'agdp', corto: 'PIB' }, empleo: { arr: 'al', corto: 'empleo' } };
 
@@ -4398,6 +4423,16 @@ function huellaSectSlice(cu, metricKey) {
   for (let cs = 1; cs <= 46; cs++) out.push(arr[huellaIdx(cu, cs)]);
   return out;
 }
+// Valor de cada provincia shockeada por completo (todos sus sectores a la
+// vez) — data/regional_change.json, ya viene indexado cod_ubicacion-1.
+function huellaProvTotalSlice(metricKey) { return REG_DATA[HUELLA_METRICS[metricKey].arr]; }
+// Valor de cada sector shockeado por completo (todas las provincias a la
+// vez) — data/sectoral_change.json, ya viene indexado cod_sector-1.
+function huellaSectTotalSlice(metricKey) { return SECT_DATA[HUELLA_METRICS[metricKey].arr]; }
+// Slice efectivamente en pantalla en el mapa/ranking, según el botón "Ver
+// impacto total..." esté activo o no.
+function huellaCurrentProvSlice(metricKey) { return huellaMapTotalView ? huellaProvTotalSlice(metricKey) : huellaProvSlice(huellaSelSect, metricKey); }
+function huellaCurrentSectSlice(metricKey) { return huellaSectTotalView ? huellaSectTotalSlice(metricKey) : huellaSectSlice(huellaSelProv, metricKey); }
 // Lugar 1-based en orden descendente (mayor valor = 1er lugar): "de mayor a
 // menor impacto", no por magnitud — AL puede ser negativo en unas pocas celdas.
 function huellaRank(value, allValues) {
@@ -4405,13 +4440,14 @@ function huellaRank(value, allValues) {
   allValues.forEach(v => { if (v > value) r++; });
   return r;
 }
-// Valores en % muy chicos (máx. observado ~0,075%): con 2 decimales fijos casi
-// todo redondearía a 0,00%. Sube a 4 decimales bajo 0,01% para no perder toda
-// la resolución del dato.
-function fmtHuellaPct(v) {
+// AGDP_norm/L_norm son adimensionales (no %, ver diccionario): "1" equivale
+// al peso de la celda, valores sobre 1 implican amplificación por
+// encadenamientos y pueden llegar a varias decenas en celdas de peso chico.
+// Sube a 4 decimales bajo 0,01 en valor absoluto para no perder resolución ahí.
+function fmtHuella(v) {
   if (v === null || v === undefined || isNaN(v)) return 'S/D';
   const dec = Math.abs(v) > 0 && Math.abs(v) < 0.01 ? 4 : 2;
-  return v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: dec }) + '%';
+  return v.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: dec });
 }
 
 // cod_ubicacion (1-56, el de este dataset) <-> código INE (el de mapa-geo.json
@@ -4450,15 +4486,17 @@ function positionHuellaMapTooltip(evt) {
 }
 function huellaMapTooltipHTML(cu) {
   const prov = PROV_SECT.provincias[cu - 1];
-  const valsPib = huellaProvSlice(huellaSelSect, 'pib'), valsEmp = huellaProvSlice(huellaSelSect, 'empleo');
+  const valsPib = huellaCurrentProvSlice('pib'), valsEmp = huellaCurrentProvSlice('empleo');
   const vPib = valsPib[cu - 1], vEmp = valsEmp[cu - 1];
-  const sectorNombre = PROV_SECT.sectores[huellaSelSect - 1].nombre;
+  const noteLine = huellaMapTotalView
+    ? 'Impacto total: todos los sectores'
+    : `Sector evaluado: ${PROV_SECT.sectores[huellaSelSect - 1].nombre}`;
   return `<div class="tt-title">${prov.nombre} · ${prov.region}</div>
-    <div class="tt-sec-note" style="margin-bottom:6px">Sector evaluado: ${sectorNombre}</div>
-    <div class="tt-main-v">${fmtHuellaPct(huellaMetric === 'pib' ? vPib : vEmp)}</div>
+    <div class="tt-sec-note" style="margin-bottom:6px">${noteLine}</div>
+    <div class="tt-main-v">${fmtHuella(huellaMetric === 'pib' ? vPib : vEmp)}</div>
     <div class="tt-rest">
-      <div class="tt-row"><span>Impacto en el PIB</span><span>${fmtHuellaPct(vPib)} · ${huellaRank(vPib, valsPib)}º de 56</span></div>
-      <div class="tt-row"><span>Impacto en el empleo</span><span>${fmtHuellaPct(vEmp)} · ${huellaRank(vEmp, valsEmp)}º de 56</span></div>
+      <div class="tt-row"><span>Impacto en el PIB</span><span>${fmtHuella(vPib)} · ${huellaRank(vPib, valsPib)}º de 56</span></div>
+      <div class="tt-row"><span>Impacto en el empleo</span><span>${fmtHuella(vEmp)} · ${huellaRank(vEmp, valsEmp)}º de 56</span></div>
     </div>`;
 }
 function showHuellaMapTooltip(cu, evt) {
@@ -4484,15 +4522,17 @@ function positionHuellaSectTooltip(evt) {
 }
 function huellaSectTooltipHTML(cs) {
   const sect = PROV_SECT.sectores[cs - 1];
-  const valsPib = huellaSectSlice(huellaSelProv, 'pib'), valsEmp = huellaSectSlice(huellaSelProv, 'empleo');
+  const valsPib = huellaCurrentSectSlice('pib'), valsEmp = huellaCurrentSectSlice('empleo');
   const vPib = valsPib[cs - 1], vEmp = valsEmp[cs - 1];
-  const provNombre = PROV_SECT.provincias[huellaSelProv - 1].nombre;
+  const noteLine = huellaSectTotalView
+    ? `${sect.industria} · Impacto total: todas las provincias`
+    : `${sect.industria} · Provincia evaluada: ${PROV_SECT.provincias[huellaSelProv - 1].nombre}`;
   return `<div class="tt-title">${sect.nombre}</div>
-    <div class="tt-sec-note" style="margin-bottom:6px">${sect.industria} · Provincia evaluada: ${provNombre}</div>
-    <div class="tt-main-v">${fmtHuellaPct(huellaMetric === 'pib' ? vPib : vEmp)}</div>
+    <div class="tt-sec-note" style="margin-bottom:6px">${noteLine}</div>
+    <div class="tt-main-v">${fmtHuella(huellaMetric === 'pib' ? vPib : vEmp)}</div>
     <div class="tt-rest">
-      <div class="tt-row"><span>Impacto en el PIB</span><span>${fmtHuellaPct(vPib)} · ${huellaRank(vPib, valsPib)}º de 46</span></div>
-      <div class="tt-row"><span>Impacto en el empleo</span><span>${fmtHuellaPct(vEmp)} · ${huellaRank(vEmp, valsEmp)}º de 46</span></div>
+      <div class="tt-row"><span>Impacto en el PIB</span><span>${fmtHuella(vPib)} · ${huellaRank(vPib, valsPib)}º de 46</span></div>
+      <div class="tt-row"><span>Impacto en el empleo</span><span>${fmtHuella(vEmp)} · ${huellaRank(vEmp, valsEmp)}º de 46</span></div>
     </div>`;
 }
 function showHuellaSectTooltip(cs, evt) {
@@ -4550,9 +4590,13 @@ function updateHuellaMapSeleccion() {
 }
 function renderHuellaMapaColores() {
   const corto = HUELLA_METRICS[huellaMetric].corto;
-  const sectorNombre = PROV_SECT.sectores[huellaSelSect - 1].nombre;
-  document.getElementById('huellaMapTitle').textContent = `Impacto en el ${corto} nacional por provincia (sector: ${sectorNombre})`;
-  const vals = huellaProvSlice(huellaSelSect, huellaMetric);
+  if (huellaMapTotalView) {
+    document.getElementById('huellaMapTitle').textContent = `Impacto en el ${corto} nacional por provincia (total, todos los sectores)`;
+  } else {
+    const sectorNombre = PROV_SECT.sectores[huellaSelSect - 1].nombre;
+    document.getElementById('huellaMapTitle').textContent = `Impacto en el ${corto} nacional por provincia (sector: ${sectorNombre})`;
+  }
+  const vals = huellaCurrentProvSlice(huellaMetric);
   let maxAbs = 1e-9;
   vals.forEach(v => { if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v); });
   ['huellaMapNorte', 'huellaMapSur'].forEach(svgId => {
@@ -4563,18 +4607,22 @@ function renderHuellaMapaColores() {
   });
   let maxPos = 0, maxNeg = 0;
   vals.forEach(v => { if (v > maxPos) maxPos = v; if (-v > maxNeg) maxNeg = -v; });
-  document.getElementById('huellaMapLegendTitle').textContent = `Impacto en el ${corto} (%)`;
-  document.getElementById('huellaMapLegendMax').textContent = '+' + fmtHuellaPct(maxPos);
-  document.getElementById('huellaMapLegendMin').textContent = '−' + fmtHuellaPct(maxNeg);
+  document.getElementById('huellaMapLegendTitle').textContent = `Impacto en el ${corto}`;
+  document.getElementById('huellaMapLegendMax').textContent = '+' + fmtHuella(maxPos);
+  document.getElementById('huellaMapLegendMin').textContent = '−' + fmtHuella(maxNeg);
 }
 
 // ── Ranking de sectores (misma estética que el de la ficha de empresa) ──
 function renderHuellaSectores() {
   const listEl = document.getElementById('huellaSectList');
   const corto = HUELLA_METRICS[huellaMetric].corto;
-  const provNombre = PROV_SECT.provincias[huellaSelProv - 1].nombre;
-  document.getElementById('huellaSectListTitle').textContent = `Impacto en el ${corto} nacional por sector (provincia: ${provNombre})`;
-  const vals = huellaSectSlice(huellaSelProv, huellaMetric);
+  if (huellaSectTotalView) {
+    document.getElementById('huellaSectListTitle').textContent = `Impacto en el ${corto} nacional por sector (total, todas las provincias)`;
+  } else {
+    const provNombre = PROV_SECT.provincias[huellaSelProv - 1].nombre;
+    document.getElementById('huellaSectListTitle').textContent = `Impacto en el ${corto} nacional por sector (provincia: ${provNombre})`;
+  }
+  const vals = huellaCurrentSectSlice(huellaMetric);
   const rows = PROV_SECT.sectores.map((s, i) => Object.assign({ valor: vals[i] }, s));
   rows.sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor));
   const maxAbs = Math.max(...rows.map(r => Math.abs(r.valor)), 1e-9);
@@ -4589,7 +4637,7 @@ function renderHuellaSectores() {
       <span class="sect-bar-rank">${i + 1}</span>
       <span class="sect-bar-name" title="${row.nombre}">${row.nombre}</span>
       <div class="sect-bar-track"><div class="sect-bar-fill" style="width:${pct}%; background:${color}"></div></div>
-      <span class="sect-bar-val">${fmtHuellaPct(row.valor)}</span>`;
+      <span class="sect-bar-val">${fmtHuella(row.valor)}</span>`;
     rowEl.addEventListener('mouseenter', ev => { rowEl.classList.add('active'); showHuellaSectTooltip(row.codigo, ev); });
     rowEl.addEventListener('mousemove', ev => { if (huellaSectPin === null) positionHuellaSectTooltip(ev); });
     rowEl.addEventListener('mouseleave', () => { rowEl.classList.remove('active'); if (huellaSectPin === null) hideHuellaSectTooltip(); });
@@ -4625,8 +4673,10 @@ function huellaCenterSelectedSectorRow() {
 function abrirHuella(cu, cs) {
   huellaSelProv = cu;
   huellaSelSect = cs;
-  huellaMapPin = cu;
-  huellaSectPin = cs;
+  huellaMapPin = null;
+  huellaSectPin = null;
+  huellaMapTotalView = false;
+  huellaSectTotalView = false;
 
   const h = document.getElementById('huella');
   const provNombre = PROV_SECT.provincias[cu - 1].nombre;
@@ -4640,10 +4690,58 @@ function abrirHuella(cu, cs) {
 
   renderHuellaMapaColores();
   updateHuellaMapSeleccion();
+  updateHuellaMapTotalBtn();
   renderHuellaSectores();
   huellaCenterSelectedSectorRow();
-  showHuellaMapTooltipAtElement(cu);
-  showHuellaSectTooltipAtElement(cs);
+  updateHuellaSectTotalBtn();
+  hideHuellaMapTooltip();
+  hideHuellaSectTooltip();
+}
+
+// ── Botones "Ver impacto total..." bajo el mapa y el ranking: alternan entre
+// la vista a celda fija (sector o provincia elegidos) y el agregado de todos
+// los sectores/todas las provincias. Sólo cambia la fuente de datos y el
+// rótulo del botón; la provincia/sector elegidos siguen destacados. ──
+function updateHuellaMapTotalBtn() {
+  const btn = document.getElementById('huellaMapTotalBtn');
+  if (!btn) return;
+  if (huellaMapTotalView) {
+    const sectorNombre = PROV_SECT.sectores[huellaSelSect - 1].nombre;
+    btn.textContent = `Volver a impacto por provincia, sector ${sectorNombre}`;
+    btn.removeAttribute('title');
+    btn.classList.add('is-active');
+  } else {
+    btn.textContent = 'Ver impacto total provincia';
+    btn.title = 'Muestra el impacto en el PIB (o Empleo, dependiendo de la selección del botón PIB/Empleo) nacional de cada provincia, sin aperturar por sectores';
+    btn.classList.remove('is-active');
+  }
+}
+function toggleHuellaMapTotal() {
+  huellaMapTotalView = !huellaMapTotalView;
+  renderHuellaMapaColores();
+  updateHuellaMapTotalBtn();
+  if (huellaMapPin !== null) showHuellaMapTooltipAtElement(huellaMapPin);
+}
+function updateHuellaSectTotalBtn() {
+  const btn = document.getElementById('huellaSectTotalBtn');
+  if (!btn) return;
+  if (huellaSectTotalView) {
+    const provNombre = PROV_SECT.provincias[huellaSelProv - 1].nombre;
+    btn.textContent = `Volver a impacto por sector, provincia ${provNombre}`;
+    btn.removeAttribute('title');
+    btn.classList.add('is-active');
+  } else {
+    btn.textContent = 'Ver impacto total sector';
+    btn.title = 'Muestra el impacto en el PIB (o Empleo, dependiendo de la selección del botón PIB/Empleo) nacional de cada sector, sin aperturar por provincias';
+    btn.classList.remove('is-active');
+  }
+}
+function toggleHuellaSectTotal() {
+  huellaSectTotalView = !huellaSectTotalView;
+  renderHuellaSectores();
+  huellaCenterSelectedSectorRow();
+  updateHuellaSectTotalBtn();
+  if (huellaSectPin !== null) showHuellaSectTooltipAtElement(huellaSectPin);
 }
 
 function cerrarHuella() {
@@ -4830,7 +4928,8 @@ talamoLoadData().then(() => {
 window.TalamoSignal = {
   calcular, enviar, toggleNav, clearRankSearch, abrirExploradorDetalle,
   cerrarExploradorDetalle, abrirFicha, cerrarFicha, cerrarHuella, abrirLead, cerrarLead,
-  enviarFicha, renderRanking, sortRanking, toggleFichaRedMeto
+  enviarFicha, renderRanking, sortRanking, toggleFichaRedMeto,
+  toggleHuellaMapTotal, toggleHuellaSectTotal
 };
 })();
 </script>
