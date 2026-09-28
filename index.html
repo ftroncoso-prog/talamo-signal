@@ -1905,6 +1905,10 @@ footer {
     <div class="expl-subsec">
       <div class="compsec-titlerow">
         <h3 class="expl-subsec-title">Comparador de impactos por provincia y sector</h3>
+        <div class="compsec-toggle" id="huellaCmpToggle" role="group" aria-label="Métrica">
+          <button type="button" class="compsec-toggle-btn is-active" data-metric="pib">PIB</button>
+          <button type="button" class="compsec-toggle-btn" data-metric="empleo">Empleo</button>
+        </div>
       </div>
       <p class="expl-lead">Cada celda es una combinación provincia-sector, con el mismo dato que el mapa y el ránking de arriba. <b>Izquierda</b>: su selección inicial de provincia y sector. <b>Derecha</b>: elija cualquier otra provincia y sector para comparar. Pase el cursor sobre una celda para ver su valor y su lugar entre las 2.576 combinaciones del modelo.</p>
       <div class="expl-map-row">
@@ -4967,21 +4971,26 @@ function cerrarHuella() {
   hideHuellaMapTooltip(); hideHuellaSectTooltip();
 }
 
+// PIB/Empleo es un único estado (huellaMetric) compartido por el mapa, el
+// ránking y el comparador de abajo — hay dos toggles en pantalla (#huellaToggle
+// arriba, #huellaCmpToggle en el comparador) que lo controlan y se mantienen
+// sincronizados entre sí.
+function huellaSetMetric(metric) {
+  huellaMetric = metric;
+  document.querySelectorAll('#huellaToggle .compsec-toggle-btn, #huellaCmpToggle .compsec-toggle-btn').forEach(b => {
+    b.classList.toggle('is-active', b.getAttribute('data-metric') === metric);
+  });
+  if (!huellaSelProv || !huellaSelSect) return;
+  renderHuellaMapaColores();
+  renderHuellaSectores();
+  huellaCenterSelectedSectorRow();
+  if (huellaMapPin !== null) showHuellaMapTooltipAtElement(huellaMapPin);
+  if (huellaSectPin !== null) showHuellaSectTooltipAtElement(huellaSectPin);
+  huellaCmpRenderAll();
+}
 function initHuellaToggle() {
-  const t = document.getElementById('huellaToggle');
-  if (!t) return;
-  t.querySelectorAll('.compsec-toggle-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      huellaMetric = btn.getAttribute('data-metric');
-      t.querySelectorAll('.compsec-toggle-btn').forEach(b => b.classList.toggle('is-active', b === btn));
-      if (!huellaSelProv || !huellaSelSect) return;
-      renderHuellaMapaColores();
-      renderHuellaSectores();
-      huellaCenterSelectedSectorRow();
-      if (huellaMapPin !== null) showHuellaMapTooltipAtElement(huellaMapPin);
-      if (huellaSectPin !== null) showHuellaSectTooltipAtElement(huellaSectPin);
-      huellaCmpRenderAll();
-    });
+  document.querySelectorAll('#huellaToggle .compsec-toggle-btn, #huellaCmpToggle .compsec-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => huellaSetMetric(btn.getAttribute('data-metric')));
   });
 }
 
