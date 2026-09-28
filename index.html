@@ -1894,6 +1894,43 @@ footer {
       </div>
     </div>
 
+    <div class="expl-subsec">
+      <div class="compsec-titlerow">
+        <h3 class="expl-subsec-title">Comparador de impactos por provincia y sector</h3>
+      </div>
+      <p class="expl-lead">Cada celda es una combinación provincia-sector, con el mismo dato que el mapa y el ránking de arriba (AGDP_norm/L_norm, sólo contrafactual Benchmark). <b>Izquierda</b>: su selección de "Estima tu Huella". <b>Derecha</b>: elija cualquier otra provincia y sector para comparar. Pase el cursor sobre una celda para ver su valor y su lugar entre las 2.576 combinaciones del modelo.</p>
+      <div class="expl-map-row">
+        <div class="mapa-col">
+          <div class="mapa-col-title" id="huellaCmpTitleA">Su selección</div>
+          <div class="rednet-card mip-card">
+            <svg id="huellaCmpSvgA" class="mip-svg"></svg>
+          </div>
+        </div>
+        <div class="mapa-col">
+          <div class="frow2">
+            <select id="huellaCmpProvIn" class="fctrl compsec-select mip-select">
+              <option value="">Seleccione una provincia...</option>
+            </select>
+            <select id="huellaCmpSectIn" class="fctrl compsec-select mip-select">
+              <option value="">Seleccione un sector...</option>
+            </select>
+          </div>
+          <div class="rednet-card mip-card">
+            <svg id="huellaCmpSvgB" class="mip-svg"></svg>
+          </div>
+        </div>
+        <div class="mapa-legend">
+          <div class="legend-title" id="huellaCmpLegendTitle">Impacto en el PIB</div>
+          <div class="legend-bar-wrap">
+            <span class="legend-val" id="huellaCmpLegendMax">–</span>
+            <div class="legend-bar legend-bar-diverging"><span class="legend-zero-tick">0</span></div>
+            <span class="legend-val" id="huellaCmpLegendMin">–</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="huellaCmpTooltip" class="mapa-tooltip" hidden></div>
+
     <div class="ficha-wrap" style="padding-top:0">
       <div class="ficha-cta">
         <div class="eyebrow">Profundiza el Análisis</div>
@@ -4405,6 +4442,8 @@ let huellaMapBuilt = false;      // los <path> del mapa se arman una sola vez; s
 let huellaScrollY = 0;
 let huellaMapTotalView = false;  // false = impacto por provincia a sector fijo (REG_SECT_DATA); true = impacto total de cada provincia, todos los sectores (REG_DATA)
 let huellaSectTotalView = false; // false = impacto por sector a provincia fija (REG_SECT_DATA); true = impacto total de cada sector, todas las provincias (SECT_DATA)
+let huellaCmpProv = null;        // cod_ubicacion elegido en el comparador (matriz derecha, null = sin elegir)
+let huellaCmpSect = null;        // cod_sector elegido en el comparador (matriz derecha, null = sin elegir)
 
 const HUELLA_METRICS = { pib: { arr: 'agdp', corto: 'PIB' }, empleo: { arr: 'al', corto: 'empleo' } };
 
@@ -4670,6 +4709,122 @@ function huellaCenterSelectedSectorRow() {
   listEl.scrollTop = rowTopInList - (listEl.clientHeight / 2) + (rowRect.height / 2);
 }
 
+// ── Comparador de impactos por provincia y sector: dos matrices
+// provincia(columna) × sector(fila) con el mismo dato que el mapa/ranking de
+// arriba (REG_SECT_DATA, huellaMetric vigente). Réplica del layout de
+// "Matrices de insumo-producto locales" del Explorador (mipRenderPanel/
+// svgNode/.mip-card/.mip-svg), pero con color divergente (fichaEfectoColor,
+// igual que el mapa de huella) en vez de la rampa unidireccional del IO. La
+// matriz izquierda queda fija a la selección de "Estima tu Huella"; la
+// derecha se elige con sus propios <select> provincia/sector. ──
+function huellaCmpMaxAbs(metricKey) {
+  const arr = REG_SECT_DATA[HUELLA_METRICS[metricKey].arr];
+  let m = 1e-9;
+  arr.forEach(v => { if (Math.abs(v) > m) m = Math.abs(v); });
+  return m;
+}
+function positionHuellaCmpTooltip(evt) {
+  const tt = document.getElementById('huellaCmpTooltip'); if (!tt) return;
+  const pad = 16;
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  const rect = tt.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 8) x = evt.clientX - rect.width - pad;
+  if (y + rect.height > window.innerHeight - 8) y = evt.clientY - rect.height - pad;
+  tt.style.left = Math.max(8, x) + 'px'; tt.style.top = Math.max(8, y) + 'px';
+}
+function hideHuellaCmpTooltip() { const tt = document.getElementById('huellaCmpTooltip'); if (tt) tt.hidden = true; }
+function showHuellaCmpTooltip(evt, cu, cs) {
+  const tt = document.getElementById('huellaCmpTooltip'); if (!tt) return;
+  const prov = PROV_SECT.provincias[cu - 1], sect = PROV_SECT.sectores[cs - 1];
+  const idx = huellaIdx(cu, cs);
+  const vPib = REG_SECT_DATA.agdp[idx], vEmp = REG_SECT_DATA.al[idx];
+  tt.innerHTML = `<div class="tt-title">${sect.nombre}</div>
+    <div class="tt-sec-note" style="margin-bottom:6px">${prov.nombre} · ${prov.region}</div>
+    <div class="tt-main-v">${fmtHuella(huellaMetric === 'pib' ? vPib : vEmp)}</div>
+    <div class="tt-rest">
+      <div class="tt-row"><span>Impacto en el PIB</span><span>${fmtHuella(vPib)} · ${huellaRank(vPib, REG_SECT_DATA.agdp)}º de 2.576</span></div>
+      <div class="tt-row"><span>Impacto en el empleo</span><span>${fmtHuella(vEmp)} · ${huellaRank(vEmp, REG_SECT_DATA.al)}º de 2.576</span></div>
+    </div>`;
+  tt.hidden = false;
+  positionHuellaCmpTooltip(evt);
+}
+// nR=46 sectores (filas) × nC=56 provincias (columnas); ambos arrays ya vienen
+// agrupados por industria/región (mismo orden usado en los <select> jerárquicos).
+function huellaCmpRenderPanel(svgEl, selCu, selCs, maxAbs) {
+  if (!svgEl) return;
+  svgEl.innerHTML = '';
+  const rows = PROV_SECT.sectores, cols = PROV_SECT.provincias;
+  const nR = rows.length, nC = cols.length;
+  const W = 900, H = 640;
+  const mL = 118, mB = 96, mT = 10, mR = 6;
+  const gw = W - mL - mR, gh = H - mT - mB;
+  const cell = Math.min(gw / nC, gh / nR);
+  const gridW = cell * nC, gridH = cell * nR;
+  svgEl.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const g = svgNode('g', { transform: 'translate(' + mL + ',' + mT + ')' });
+  svgEl.appendChild(g);
+  const arr = REG_SECT_DATA[HUELLA_METRICS[huellaMetric].arr];
+  let selRect = null;
+  rows.forEach((s, r) => {
+    cols.forEach((p, c) => {
+      const v = arr[huellaIdx(p.codigo, s.codigo)];
+      const isSel = selCu === p.codigo && selCs === s.codigo;
+      const rect = svgNode('rect', {
+        x: (c * cell).toFixed(1), y: (r * cell).toFixed(1),
+        width: (cell + 0.4).toFixed(1), height: (cell + 0.4).toFixed(1),
+        fill: fichaEfectoColor(v, maxAbs),
+        stroke: isSel ? 'var(--celeste)' : 'rgba(38,70,83,0.35)',
+        'stroke-width': isSel ? '2.2' : '0.4'
+      });
+      rect.style.cursor = 'pointer';
+      rect.addEventListener('mouseenter', ev => showHuellaCmpTooltip(ev, p.codigo, s.codigo));
+      rect.addEventListener('mousemove', positionHuellaCmpTooltip);
+      rect.addEventListener('mouseleave', hideHuellaCmpTooltip);
+      g.appendChild(rect);
+      if (isSel) selRect = rect;
+    });
+  });
+  if (selRect) g.appendChild(selRect); // trae el borde de la celda elegida al frente, sobre sus vecinas
+  const fy = 5.6;
+  rows.forEach((s, i) => {
+    const t = svgNode('text', { x: '-6', y: (i * cell + cell / 2).toFixed(1), dy: '0.32em', 'text-anchor': 'end', 'font-size': fy, fill: 'var(--hueso60)' });
+    t.textContent = s.nombre; g.appendChild(t);
+  });
+  cols.forEach((p, i) => {
+    const t = svgNode('text', { transform: 'translate(' + (i * cell + cell / 2).toFixed(1) + ',' + (gridH + 6).toFixed(1) + ') rotate(-60)', 'text-anchor': 'end', 'font-size': fy, fill: 'var(--hueso60)' });
+    t.textContent = p.nombre; g.appendChild(t);
+  });
+}
+function huellaCmpRenderAll() {
+  if (!huellaSelProv || !huellaSelSect) return;
+  const corto = HUELLA_METRICS[huellaMetric].corto;
+  const maxAbs = huellaCmpMaxAbs(huellaMetric);
+  const titleA = document.getElementById('huellaCmpTitleA');
+  if (titleA) titleA.textContent = `Su selección — ${PROV_SECT.sectores[huellaSelSect - 1].nombre} en ${PROV_SECT.provincias[huellaSelProv - 1].nombre}`;
+  huellaCmpRenderPanel(document.getElementById('huellaCmpSvgA'), huellaSelProv, huellaSelSect, maxAbs);
+  huellaCmpRenderPanel(document.getElementById('huellaCmpSvgB'), huellaCmpProv, huellaCmpSect, maxAbs);
+  document.getElementById('huellaCmpLegendTitle').textContent = `Impacto en el ${corto}`;
+  let maxPos = 0, maxNeg = 0;
+  REG_SECT_DATA[HUELLA_METRICS[huellaMetric].arr].forEach(v => { if (v > maxPos) maxPos = v; if (-v > maxNeg) maxNeg = -v; });
+  document.getElementById('huellaCmpLegendMax').textContent = '+' + fmtHuella(maxPos);
+  document.getElementById('huellaCmpLegendMin').textContent = '−' + fmtHuella(maxNeg);
+}
+function initHuellaCmp() {
+  const selP = document.getElementById('huellaCmpProvIn'), selS = document.getElementById('huellaCmpSectIn');
+  if (!selP || !selS || !PROV_SECT) return;
+  selP.insertAdjacentHTML('beforeend', huellaBuildOptgroups(PROV_SECT.provincias, 'region', 'codigo', 'nombre'));
+  selS.insertAdjacentHTML('beforeend', huellaBuildOptgroups(PROV_SECT.sectores, 'industria', 'codigo', 'nombre'));
+  selP.addEventListener('change', () => {
+    huellaCmpProv = selP.value ? parseInt(selP.value, 10) : null;
+    huellaCmpRenderAll();
+  });
+  selS.addEventListener('change', () => {
+    huellaCmpSect = selS.value ? parseInt(selS.value, 10) : null;
+    huellaCmpRenderAll();
+  });
+}
+
 function abrirHuella(cu, cs) {
   huellaSelProv = cu;
   huellaSelSect = cs;
@@ -4677,6 +4832,8 @@ function abrirHuella(cu, cs) {
   huellaSectPin = null;
   huellaMapTotalView = false;
   huellaSectTotalView = false;
+  huellaCmpProv = null;
+  huellaCmpSect = null;
 
   const h = document.getElementById('huella');
   const provNombre = PROV_SECT.provincias[cu - 1].nombre;
@@ -4696,6 +4853,12 @@ function abrirHuella(cu, cs) {
   updateHuellaSectTotalBtn();
   hideHuellaMapTooltip();
   hideHuellaSectTooltip();
+
+  const cmpP = document.getElementById('huellaCmpProvIn'), cmpS = document.getElementById('huellaCmpSectIn');
+  if (cmpP) cmpP.value = '';
+  if (cmpS) cmpS.value = '';
+  huellaCmpRenderAll();
+  hideHuellaCmpTooltip();
 }
 
 // ── Botones "Ver impacto total..." bajo el mapa y el ranking: alternan entre
@@ -4767,6 +4930,7 @@ function initHuellaToggle() {
       huellaCenterSelectedSectorRow();
       if (huellaMapPin !== null) showHuellaMapTooltipAtElement(huellaMapPin);
       if (huellaSectPin !== null) showHuellaSectTooltipAtElement(huellaSectPin);
+      huellaCmpRenderAll();
     });
   });
 }
@@ -4912,6 +5076,7 @@ talamoLoadData().then(() => {
   initHuellaSelectors();
   initHuellaProvMapping();
   initHuellaMapPanels();
+  initHuellaCmp();
 }).catch(err => {
   console.error('Tálamo Signal: error cargando datos', err);
   document.getElementById('talamoLoadMsg').textContent = 'No se pudieron cargar los datos.';
