@@ -495,7 +495,7 @@ tbody tr.is-hit { animation:hitPulse 1.1s ease; }
    especificidad que una clase, ganaba por orden de aparición — el alto
    quedaba pisado en 520px pese a esta regla. Por ID gana siempre, sin
    depender del orden. */
-#huellaCmpSvgA, #huellaCmpSvgB { height:660px; }
+#huellaCmpSvgA, #huellaCmpSvgB { height:560px; }
 @media (max-width:900px) {
   #huellaCmpSvgA, #huellaCmpSvgB { height:auto; }
 }
@@ -4811,7 +4811,7 @@ function huellaCmpRenderPanel(svgEl, selCu, selCs, maxAbs) {
   const rows = PROV_SECT.sectores, cols = PROV_SECT.provincias;
   const nR = rows.length, nC = cols.length;
   const W = 960, H = 680;
-  const mL = 235, mB = 185, mT = 10, mR = 8; // margen ampliado para el font-size más grande de las etiquetas (fy)
+  const mL = 220, mB = 113, mT = 10, mR = 8; // margen ajustado al mínimo que no corta las etiquetas más largas de cada eje, para maximizar el tamaño de celda
   const gw = W - mL - mR, gh = H - mT - mB;
   const cell = Math.min(gw / nC, gh / nR);
   const gridW = cell * nC, gridH = cell * nR;
