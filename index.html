@@ -1746,8 +1746,8 @@ footer {
       </div>
       <div class="ficha-top-right" id="dRedWrap" hidden>
         <div class="ficha-red-hd">
-          <h3 class="expl-subsec-title">El entorno productivo de la empresa</h3>
-          <p class="ficha-red-sub">La red de las celdas —provincia × sector— donde opera la empresa, con quién comercian y cuánto (DEA 2022). Es el comercio de esas celdas, no las transacciones de la empresa: dos empresas de la misma celda comparten esta red. El anillo celeste marca las celdas propias.</p>
+          <h3 class="expl-subsec-title" id="fichaRedTitle">El entorno productivo de la empresa</h3>
+          <p class="ficha-red-sub">La red entre los sectores de la economía, con la empresa separada de su sector como un nodo propio, destacado en rojo. Es el comercio observado 2022 entre sectores, con la parte de la empresa repartida según su peso en su sector principal — no son las transacciones propias de la empresa, que no están disponibles.</p>
         </div>
         <div class="ficha-red-body">
           <svg id="fichaRedSvg" class="ficha-red-svg" viewBox="0 0 620 620"></svg>
@@ -1757,11 +1757,11 @@ footer {
               <button type="button" class="ficha-red-meto-btn" id="fichaRedMetoBtn" aria-expanded="false" aria-controls="fichaRedMetoPanel" onclick="TalamoSignal.toggleFichaRedMeto()">Metodología</button>
               <div class="ficha-red-meto-panel" id="fichaRedMetoPanel" hidden>
                 <h4>Elementos y tamaños</h4>
-                <p>Cada <b>nodo</b> es una celda de la economía —provincia × sector, 13 sectores—. La etiqueta indica el sector; el <b>color</b>, la provincia (las 8 de mayor flujo con color propio, el resto en gris «Otras provincias»; blanco = Resto del Mundo). El <b>tamaño</b> del nodo es proporcional al flujo total que entra y sale de esa celda. El <b>anillo celeste</b> marca los nodos donde se sabe o estima que vende la empresa al menos un 10% de su nodo de venta máxima. Cada <b>flecha</b> es un vínculo comercial —ancha en el origen, en punta hacia el destino, del color de quien vende—; su grosor está reescalado para que los vínculos chicos no queden invisibles, no es proporcional al peso exacto.</p>
+                <p>Cada <b>nodo</b> es uno de los 46 sectores de la economía, el <b>Resto del Mundo</b>, o la <b>empresa</b> —separada de su sector, que queda como «(resto)»—. El <b>color</b> es la industria del sector, en seis grupos más el Resto del Mundo; la empresa va siempre en <b>rojo</b>, con un anillo pulsante para distinguirla aunque su nodo sea chico. El <b>tamaño</b> del nodo es proporcional al flujo que entra y sale de él entre los vínculos dibujados. Cada <b>flecha</b> es un vínculo comercial —ancha en el origen, en punta hacia el destino, del color de quien vende—; su grosor está reescalado en logaritmo para que los vínculos chicos no queden invisibles, no es proporcional al peso exacto. Un <b>anillo de color al costado de un nodo</b> es el comercio del sector consigo mismo.</p>
+                <h4>Cómo se separa la empresa de su sector</h4>
+                <p>Con una regla de tres: su peso es lo que vende en Chile en su sector principal dividido por lo que produce ese sector en todo el país. Cada flujo del sector se reparte en esa proporción — la empresa se queda con esa fracción de lo que el sector vende y compra, y el resto del sector con lo demás. Es un supuesto, no un dato: los flujos llegan agregados por sector y no hay transacciones a nivel de empresa, así que todas las empresas de un mismo sector tienen el mismo patrón de vínculos, y solo cambia el tamaño de su nodo.</p>
                 <h4>Qué explica y qué no</h4>
-                <p>Muestra el comercio de las celdas donde opera la empresa —con quién comercian y cuánto—, no las transacciones propias de la empresa: los flujos llegan agregados por celda y no es posible aislar la parte de cada firma, así que empresas que comparten celdas comparten esta misma red. Tampoco es un contrafactual —no muestra qué pasaría si la empresa desapareciera— ni una salida del modelo: son datos observados (DEA 2022) usados como insumo.</p>
-                <h4>Cómo se determina que opera en una celda</h4>
-                <p>Depende de qué tan medida está la geografía de cada empresa, en tres niveles declarados al pie de la ficha: (1) reparto de ventas por provincia conocido, con fuente; (2) se conoce en qué provincias opera y el peso de cada una se estima; (3) sin geografía propia, estimada repartiendo como el sector a nivel nacional —por eso empresas del mismo sector pueden compartir red idéntica.</p>
+                <p>Muestra el comercio de la economía entre sectores y cuánto le toca a la empresa si se comporta como el promedio de su sector. No son las transacciones de la empresa, que no están disponibles. No es un contrafactual —no muestra qué pasaría si la empresa desapareciera— ni una salida del modelo: son datos observados de 2022, el mismo insumo con que se calibra el modelo.</p>
               </div>
             </div>
           </div>
@@ -3508,7 +3508,8 @@ let RANKING_PIB_BY_RUT = null;    // rut -> fila de ranking_pib.json (poblado en
 let PROVINCIA_BY_RUT = null;      // rut -> fila[] de aporte_por_provincia.json
 let SECTOR_BY_RUT = null;         // rut -> fila[] de aporte_por_sector.json
 let PROVINCIA_CODE_BY_NOMBRE = null; // "Antofagasta" -> código INE ("104"), vía EXPL_DATA
-let RED_CELDAS_BY_RUT = null;     // rut -> {nodos, vinculos, scaling, ...} de red_nodos_celdas.json
+let RED_SECTORES_BY_RUT = null;   // rut -> {nombre, nodos, vinculos, ...} de redes_sectores.json (275 empresas, SIPSA fuera)
+let RESUMEN_REDES_BY_RUT = null;  // rut -> fila de resumen_redes.json (trae `scaling`, que no viene en redes_sectores.json)
 let EFECTOS_DATA = null;          // { provincias[56], sectores[46], empresas: { rut: {nombre, directo[2576], indirecto[2576]} } } de efectos_directos_indirectos.json
 
 function loadFichaData() {
@@ -3516,9 +3517,10 @@ function loadFichaData() {
   fichaDataPromise = Promise.all([
     talamoFetchJSON('aporte_por_provincia.json'),
     talamoFetchJSON('aporte_por_sector.json'),
-    talamoFetchJSON('red_nodos_celdas.json'),
+    talamoFetchJSON('redes_sectores.json'),
+    talamoFetchJSON('resumen_redes.json'),
     talamoFetchJSON('efectos_directos_indirectos.json'),
-  ]).then(([pv, sc, rc, ef]) => {
+  ]).then(([pv, sc, rs, rr, ef]) => {
     PROVINCIA_BY_RUT = new Map();
     pv.forEach(row => {
       if (!PROVINCIA_BY_RUT.has(row.rut)) PROVINCIA_BY_RUT.set(row.rut, []);
@@ -3531,11 +3533,15 @@ function loadFichaData() {
     });
     PROVINCIA_CODE_BY_NOMBRE = new Map(Object.entries(EXPL_DATA.provincias).map(([code,p]) => [p.nombre, code]));
 
-    // red_nodos_celdas.json ya viene indexado por rut (nodos=celdas provincia×sector
-    // donde opera la empresa y sus vecinas, vinculos=flujos entre ellas, ambos ya
-    // seleccionados offline — ver data_input/README_GRAFO_NODOS_RANKING.md). El layout
-    // (ForceAtlas2) se calcula en el cliente, con el `scaling` que ya viene elegido ahí.
-    RED_CELDAS_BY_RUT = rc;
+    // redes_sectores.json ya viene indexado por rut, un objeto {empresas:{rut:{...}}}
+    // (nodos=46 sectores + Resto del Mundo + la empresa separada de su sector principal,
+    // vinculos=los 170 mayores de la red completa + los 10 mayores de la empresa — ver
+    // data_input/RedesSectores/README.md). No trae posiciones ni `scaling`: el layout
+    // (ForceAtlas2) se calcula en el cliente, con el `scaling` que sí viene en
+    // resumen_redes.json. SIPSA queda fuera (276 empresas del padrón, 275 acá): toda su
+    // venta es extranjera, sin nodo de Chile que dibujar.
+    RED_SECTORES_BY_RUT = rs.empresas;
+    RESUMEN_REDES_BY_RUT = new Map(rr.map(row => [row.rut, row]));
 
     // efectos_directos_indirectos.json: grilla densa 56 provincias × 46 sectores por
     // empresa (celda = provincia×sector del modelo DEA 2022, ver data_input/
@@ -3871,21 +3877,23 @@ function renderFichaEfectos() {
 }
 
 // ═══ Red de nodos de la ficha: "el entorno productivo de la empresa" — la red
-// de las CELDAS (provincia × sector, clasificación PIBR13, 13 sectores) donde
-// la empresa opera, con quién comercian esas celdas y cuánto. Node/edge
-// selection, ver data_input/README_GRAFO_NODOS_RANKING.md y
-// data_input/58_RedVinculos.py: se precalculó offline (Python) a partir de
-// en_chile_2022_dea_spatial_io_flows.csv (6,87M filas, flujos DEA 2022
-// celda↔celda) y quedó en data/red_nodos_celdas.json, indexado por rut — acá
-// solo se lee. NO es un grafo "empresa al centro" como el resto de las redes
-// de esta ficha: todos los nodos son celdas: la empresa no es un nodo, está
-// marcada por el anillo celeste en sus celdas propias (`focal`).
+// entre los 46 sectores de la economía chilena (Figura 2b del working paper,
+// "Between Sectors") con la empresa separada de su sector principal como un
+// nodo propio. Nodos y vínculos se precalculan offline (Python) en
+// data_input/RedesSectores/59_RedSectores.py a partir de los flujos DEA 2022
+// sector↔sector, y quedan en data/redes_sectores.json (indexado por rut) +
+// data/resumen_redes.json (métricas y `scaling` por empresa, ver
+// data_input/RedesSectores/README.md) — acá solo se leen y se dibujan. La
+// empresa SÍ es un nodo propio en esta red (a diferencia de la versión
+// anterior por celdas): se destaca en rojo con el anillo celeste pulsante
+// (`tipo === 'empresa'`).
 //
 // Lo único que se toma tal cual del documento de referencia es el algoritmo
 // de layout: ForceAtlas2 (Jacomy et al., 2014) en modo linLog + gravedad
 // fuerte + velocidad adaptativa (swing/traction), puerto directo de
-// data_input/red_fa2.py. Colores, tipografía y tono de los textos siguen la
-// marca Tálamo, no la paleta ni el estilo del documento original.
+// data_input/red_fa2.py. La paleta de color por industria sí es la del paper
+// (viene directo en cada nodo); tipografía y tono de los textos siguen la
+// marca Tálamo.
 function fichaRedForceAtlas2(nodes, W, scaling, opts) {
   const o = Object.assign({ iters: 600, gravity: 1.0 }, opts || {});
   const n = nodes.length;
@@ -3951,55 +3959,42 @@ function fichaRedForceAtlas2(nodes, W, scaling, opts) {
   if (s > 0) for (const nd of nodes) { nd.x /= s; nd.y /= s; }
 }
 
-// Paleta de marca para las provincias: las 8 de mayor flujo en cada figura
-// llevan color propio (los 6 tonos ya usados en RED_LOC_COLORS/INDUSTRY_COLORS
-// más dos de la misma familia, para la 7ª y 8ª cuando una figura los necesita);
-// el resto va a "Otras provincias" y Resto del Mundo queda aparte — mismo
-// criterio del documento de referencia, con colores de marca en vez de los suyos.
-const RED_CELDA_PROV_PALETTE = ['#0FA3B1', '#E76F51', '#2A9D8F', '#B99B46', '#B5E2FA', '#9CCFC6', '#7FB3D9', '#D98E4A'];
-const RED_CELDA_OTRAS = 'var(--muted-l)';
-const RED_CELDA_ROW = 'var(--hueso)';
-const FICHA_RED_NIVEL_TXT = {
-  1: 'Reparto de ventas por provincia conocido, con fuente.',
-  2: 'Se conoce en qué provincias opera la empresa; el peso de cada una se estima.',
-  3: 'Sin geografía propia: se estima repartiendo como el sector a nivel nacional.',
+// Color por industria: viene directo en cada nodo de redes_sectores.json (la
+// paleta de la figura del paper, no la paleta de marca INDUSTRY_COLORS que usa
+// el resto del sitio — son dos paletas distintas a propósito, para que esta red
+// se lea igual que la figura de referencia). FICHA_RED_INDUSTRIA_ORDEN solo
+// ordena la leyenda; no se usa para elegir el color.
+const FICHA_RED_INDUSTRIA_ORDEN = [
+  'Agropecuario-silvícola y Pesca', 'Minería', 'Manufactura',
+  'Infraestructura y Construcción', 'Servicios Productivos',
+  'Servicios Sociales', 'Resto del Mundo',
+];
+const FICHA_RED_TIPO_TXT = {
+  empresa: 'La empresa',
+  'resto del mundo': 'Resto del mundo',
+  'resto del sector': 'Resto del sector (sin la empresa)',
+  sector: 'Sector',
 };
 
-function fichaRedColorMap(nodos, st) {
-  const porProvincia = new Map();
-  nodos.forEach((nd, i) => {
-    if (nd.esRow) return;
-    porProvincia.set(nd.provincia, (porProvincia.get(nd.provincia) || 0) + st[i]);
-  });
-  const top8 = Array.from(porProvincia.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(e => e[0]);
-  const map = new Map();
-  top8.forEach((p, i) => map.set(p, RED_CELDA_PROV_PALETTE[i]));
-  return map;
-}
-function fichaRedNodeColor(nd, colorByProvincia) {
-  if (nd.esRow) return RED_CELDA_ROW;
-  return colorByProvincia.get(nd.provincia) || RED_CELDA_OTRAS;
-}
-
-function fichaRedNodeTooltipHtml(nd, flujo) {
-  return `<div class="tt-title">${nd.provincia}</div><div class="tt-main-v">${nd.sector}</div>
+function fichaRedNodeTooltipHtml(nd) {
+  return `<div class="tt-title">${nd.industria}</div><div class="tt-main-v">${nd.etiqueta}</div>
     <div class="tt-rest">
-      <div class="tt-row"><span>Flujo de la celda</span><span>${fmtMUSD(flujo)}</span></div>
-      <div class="tt-row"><span>Celda propia de la empresa</span><span>${nd.focal ? 'Sí' : 'No'}</span></div>
+      <div class="tt-row"><span>Flujo del nodo</span><span>${fmtMUSD(nd.flujo_musd)}</span></div>
+      <div class="tt-row"><span>Tipo</span><span>${FICHA_RED_TIPO_TXT[nd.tipo] || nd.tipo}</span></div>
     </div>
-    <div class="tt-sec-note">Comercio observado de esta celda (provincia × sector) con el resto de la economía — no son las transacciones de esta empresa en particular.</div>`;
+    <div class="tt-sec-note">Comercio observado 2022 de este sector con el resto de la economía${nd.tipo === 'empresa' ? ', en la parte que le corresponde a la empresa según su peso en su sector' : ''} — no son las transacciones de esta empresa en particular.</div>`;
 }
 function fichaRedEdgeTooltipHtml(a, b, w) {
   if (a.id === b.id) {
-    return `<div class="tt-title">Comercio intra-celda</div><div class="tt-main-v">${a.provincia} · ${a.sector}</div>
+    return `<div class="tt-title">Comercio intrasectorial</div><div class="tt-main-v">${a.etiqueta}</div>
       <div class="tt-rest"><div class="tt-row"><span>Flujo interno</span><span>${fmtMUSD(w)}</span></div></div>`;
   }
-  return `<div class="tt-title">Flujo de compraventa</div><div class="tt-main-v">${a.provincia} · ${a.sector} → ${b.provincia} · ${b.sector}</div>
+  return `<div class="tt-title">Flujo de compraventa</div><div class="tt-main-v">${a.etiqueta} → ${b.etiqueta}</div>
     <div class="tt-rest"><div class="tt-row"><span>Monto</span><span>${fmtMUSD(w)}</span></div></div>`;
 }
-function attachFichaRedNodeTooltip(el, nd, flujo) {
+function attachFichaRedNodeTooltip(el, nd) {
   el.style.cursor = 'pointer';
-  const html = fichaRedNodeTooltipHtml(nd, flujo);
+  const html = fichaRedNodeTooltipHtml(nd);
   el.addEventListener('mouseenter', ev => showFichaTooltip(ev, html));
   el.addEventListener('mousemove', ev => { if (!mapaState.pinned) positionFichaTooltip(ev); });
   el.addEventListener('mouseleave', hideFichaTooltip);
@@ -4066,32 +4061,40 @@ document.addEventListener('click', ev => {
   }
 });
 
-function buildFichaRedLegend(colorByProvincia, hasRow) {
+function buildFichaRedLegend(nodos) {
   const el = document.getElementById('fichaRedLegend');
   if (!el) return;
-  const items = Array.from(colorByProvincia.entries())
-    .map(([p, c]) => `<div class="sect-legend-item"><span class="sect-legend-dot" style="background:${c}"></span>${p}</div>`).join('');
-  let extra = `<div class="sect-legend-item"><span class="sect-legend-dot" style="background:${RED_CELDA_OTRAS}"></span>Otras provincias</div>`;
-  if (hasRow) extra += `<div class="sect-legend-item"><span class="sect-legend-dot" style="background:${RED_CELDA_ROW};border:1px solid rgba(38,70,83,0.3)"></span>Resto del Mundo</div>`;
-  el.innerHTML = `<div class="ficha-red-legend-group"><span class="ficha-red-legend-title">Provincia</span>${items}${extra}</div>`;
+  const emp = nodos.find(nd => nd.tipo === 'empresa');
+  const colorByIndustria = new Map();
+  nodos.forEach(nd => { if (nd.tipo !== 'empresa') colorByIndustria.set(nd.industria, nd.color); });
+  let items = emp ? `<div class="sect-legend-item"><span class="sect-legend-dot" style="background:${emp.color}"></span>${emp.etiqueta}</div>` : '';
+  items += FICHA_RED_INDUSTRIA_ORDEN.filter(ind => colorByIndustria.has(ind))
+    .map(ind => `<div class="sect-legend-item"><span class="sect-legend-dot" style="background:${colorByIndustria.get(ind)}"></span>${ind}</div>`).join('');
+  el.innerHTML = `<div class="ficha-red-legend-group"><span class="ficha-red-legend-title">Industria</span>${items}</div>`;
 }
 
 function renderFichaRed() {
   const svg = document.getElementById('fichaRedSvg');
   const wrap = document.getElementById('dRedWrap');
   if (!svg || !wrap || !fichaCtx) return;
-  const data = RED_CELDAS_BY_RUT && RED_CELDAS_BY_RUT[fichaCtx.rut];
-  if (!data || !data.nodos.length) { wrap.hidden = true; return; }
+  const red = RED_SECTORES_BY_RUT && RED_SECTORES_BY_RUT[fichaCtx.rut];
+  const resumen = RESUMEN_REDES_BY_RUT && RESUMEN_REDES_BY_RUT.get(fichaCtx.rut);
+  if (!red || !resumen || !red.nodos.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
 
-  const nodos = data.nodos;
-  const n = nodos.length;
-  const W = Array.from({ length:n }, () => new Float64Array(n));
-  data.vinculos.forEach(([i, j, w]) => { W[i][j] += w; });
-  const st = new Float64Array(n);
-  for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < n; j++) s += W[i][j] + W[j][i]; st[i] = s; }
+  const title = document.getElementById('fichaRedTitle');
+  if (title) title.textContent = `El entorno productivo de ${red.nombre_corto || red.nombre}`;
 
-  const colorByProvincia = fichaRedColorMap(nodos, st);
+  const nodos = red.nodos;
+  const n = nodos.length;
+  const idIndex = new Map(nodos.map((nd, i) => [nd.id, i]));
+  // redes_sectores.json referencia los vínculos por id ("EMP","ROW","S01"...),
+  // no por índice — se normalizan una vez acá a [i, j, flujo] para reusar tal
+  // cual el resto de la lógica de armado (ForceAtlas2, dibujo de aristas/bucles),
+  // idéntica a la versión anterior por celdas.
+  const vinculos = red.vinculos.map(v => [idIndex.get(v.origen), idIndex.get(v.destino), v.flujo_musd]);
+  const W = Array.from({ length:n }, () => new Float64Array(n));
+  vinculos.forEach(([i, j, w]) => { W[i][j] += w; });
 
   // Posición inicial en espiral de ángulo dorado — determinística (no azar),
   // para que el layout no "salte" cada vez que se reabre la misma ficha.
@@ -4100,7 +4103,7 @@ function renderFichaRed() {
     const ang = i * GOLD, rad = 20 + Math.sqrt(i) * 14;
     return { x: Math.cos(ang) * rad, y: Math.sin(ang) * rad };
   });
-  fichaRedForceAtlas2(pts, W, data.scaling);
+  fichaRedForceAtlas2(pts, W, resumen.scaling);
 
   svg.innerHTML = '';
   const SZ = 620, pad = 40;
@@ -4113,12 +4116,16 @@ function renderFichaRed() {
   const PX = i => offX + (pts[i].x - minX) * sc;
   const PY = i => offY + (maxY - pts[i].y) * sc;
 
-  const minSt = Math.min.apply(null, st), maxSt = Math.max.apply(null, st);
+  // Tamaño del nodo: flujo_musd que ya viene por nodo (el que entra y sale de
+  // él entre los vínculos dibujados, ver README) — mismo criterio que antes,
+  // solo que ahora se lee directo del dato en vez de recomputarse desde W.
+  const flujos = nodos.map(nd => nd.flujo_musd);
+  const minSt = Math.min.apply(null, flujos), maxSt = Math.max.apply(null, flujos);
   const span = (maxSt - minSt) || 1;
   const Rmin = 3, Rmax = 22;
   // Compresión por raíz (no log): mismo criterio de red_estilo.py para que un
   // nodo dominante (típicamente Resto del Mundo) no aplaste al resto.
-  const radios = Array.from(st, v => Rmin + Math.sqrt(Math.max(0, v - minSt) / span) * (Rmax - Rmin));
+  const radios = flujos.map(v => Rmin + Math.sqrt(Math.max(0, v - minSt) / span) * (Rmax - Rmin));
 
   const gEdges = svgNode('g', {}); svg.appendChild(gEdges);
   const gNodes = svgNode('g', {}); svg.appendChild(gNodes);
@@ -4128,23 +4135,23 @@ function renderFichaRed() {
   // crudo) con una curva de potencia que preserva la jerarquía — igual criterio
   // que Gephi/red_estilo.py: sin esto, con un flujo tan concentrado como estas
   // redes, las aristas chicas quedarían invisibles.
-  const pesos = data.vinculos.map(v => v[2]);
+  const pesos = vinculos.map(v => v[2]);
   const logs = pesos.map(w => Math.log(w + 1e-12));
   const lmin = Math.min.apply(null, logs), lmax = Math.max.apply(null, logs);
   const lspan = (lmax - lmin) || 1;
   const ANCHO_MAX = 7, ALPHA_MIN = 0.08, ALPHA_MAX = 0.75;
 
-  const orden = data.vinculos.map((v, k) => k).sort((a, b) => pesos[a] - pesos[b]); // débiles primero
+  const orden = vinculos.map((v, k) => k).sort((a, b) => pesos[a] - pesos[b]); // débiles primero
   orden.forEach(k => {
-    const [i, j, w] = data.vinculos[k];
+    const [i, j, w] = vinculos[k];
     let r = (logs[k] - lmin) / lspan;
     r = 0.035 + 0.965 * Math.pow(r, 2.6);
     const width = ANCHO_MAX * Math.pow(r, 0.55);
     const alpha = ALPHA_MIN + (ALPHA_MAX - ALPHA_MIN) * Math.pow(r, 0.7);
-    const col = fichaRedNodeColor(nodos[i], colorByProvincia); // color de quien vende (origen)
+    const col = nodos[i].color; // color de quien vende (origen)
     const ax = PX(i), ay = PY(i), rA = radios[i];
 
-    if (i === j) { // bucle: comercio intra-celda — el documento de referencia sí los dibuja
+    if (i === j) { // bucle: comercio intrasectorial — la figura del paper sí lo dibuja
       const loopReach = rA * 1.1, loopH = rA * 1.0;
       const sx = ax + rA * 0.6, sy = ay - rA * 0.45, ex = ax + rA * 0.6, ey = ay + rA * 0.45;
       const d = 'M' + sx.toFixed(1) + ' ' + sy.toFixed(1) +
@@ -4178,36 +4185,38 @@ function renderFichaRed() {
 
   const placed = [];
   const ordenNodos = nodos.map((nd, i) => i).sort((a, b) => {
-    if (nodos[a].focal !== nodos[b].focal) return nodos[a].focal ? -1 : 1; // celdas propias primero
-    return st[b] - st[a];
+    const aEmp = nodos[a].tipo === 'empresa', bEmp = nodos[b].tipo === 'empresa';
+    if (aEmp !== bEmp) return aEmp ? -1 : 1; // la empresa se etiqueta primero
+    return flujos[b] - flujos[a];
   });
   ordenNodos.forEach(i => {
     const nd = nodos[i];
     const cx = PX(i), cy = PY(i), r = radios[i];
-    const col = fichaRedNodeColor(nd, colorByProvincia);
-    // Anillo celeste: celdas propias de la empresa (equivalente de marca al
-    // "anillo negro" del documento de referencia — negro no es legible sobre
-    // el fondo oscuro de esta ficha).
+    const esEmpresa = nd.tipo === 'empresa';
+    // Anillo celeste pulsante: la empresa, para que resalte aunque su nodo sea
+    // chico frente a los sectores — mismo mecanismo (.rn-focal) que ya usaba el
+    // anillo de las celdas propias en la versión anterior de esta ficha.
     const c = svgNode('circle', {
-      cx: cx.toFixed(1), cy: cy.toFixed(1), r: r.toFixed(1), fill: col,
-      stroke: nd.focal ? 'var(--celeste)' : '#F9F7F3', 'stroke-width': nd.focal ? 2.5 : 1,
-      class: nd.focal ? 'rn-focal' : '',
+      cx: cx.toFixed(1), cy: cy.toFixed(1), r: r.toFixed(1), fill: nd.color,
+      stroke: esEmpresa ? 'var(--celeste)' : '#F9F7F3', 'stroke-width': esEmpresa ? 2.5 : 1,
+      class: esEmpresa ? 'rn-focal' : '',
     });
-    attachFichaRedNodeTooltip(c, nd, st[i]);
+    attachFichaRedNodeTooltip(c, nd);
     gNodes.appendChild(c);
-    addFichaRedLabel(gLabels, cx, cy, r, nd.sector, placed, 9.5, SZ);
+    addFichaRedLabel(gLabels, cx, cy, r, nd.etiqueta, placed, 9.5, SZ);
   });
 
-  buildFichaRedLegend(colorByProvincia, nodos.some(nd => nd.esRow));
+  buildFichaRedLegend(nodos);
 
   const foot = document.getElementById('fichaRedFoot');
   if (foot) {
-    const nProp = data.celdasPropias;
-    const nodoTxt = nProp === 1 ? 'nodo principal' : 'nodos principales';
-    const cubreTxt = nProp === 1 ? 'cubre' : 'cubren';
-    foot.textContent = `${nodos.length} nodos · ${data.vinculos.length} vínculos · flujo total graficado: ${fmtMUSD(data.flujoMusd)} · ` +
-      `Hay ${nProp} ${nodoTxt} que ${cubreTxt} un ${Math.round(data.coberturaAnillos * 100)}% de las ventas (conocidas o estimadas) · ` +
-      `${FICHA_RED_NIVEL_TXT[data.nivelImputacion] || ''}`;
+    const pct = fmtPctN(red.participacion_usada * 100);
+    let txt = `${nodos.length} nodos · ${vinculos.length} vínculos · flujo total graficado: ${fmtMUSD(resumen.flujo_musd)} · ` +
+      `El nodo de la empresa reparte los flujos de su sector principal (${red.nom_sector}) según su peso en las ventas del sector (${pct}). Supone que compra y vende como el promedio del sector.`;
+    if (red.tope_100) txt += ' Sus ventas superan lo que las cuentas registran para su sector, así que se la toma como el sector completo.';
+    if (red.pct_otros_sectores > 0) txt += ` También vende en otros sectores, que no se muestran (${fmtPctN(red.pct_otros_sectores * 100)} de sus ventas).`;
+    if (red.excluida_modelo) txt += ' El modelo excluye a esta empresa, porque las cuentas no registran producción de su sector en las provincias donde opera.';
+    foot.textContent = txt;
   }
 }
 
