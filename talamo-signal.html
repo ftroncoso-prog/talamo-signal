@@ -471,6 +471,24 @@ tbody tr.is-hit { animation:hitPulse 1.1s ease; }
 .huella-total-btn:hover { background:var(--teal); color:var(--hueso); }
 .huella-total-btn.is-active { background:var(--teal); color:var(--hueso); }
 
+/* Encabezados del comparador de "Estima tu Huella": a la izquierda hay un
+   título de una línea (.mapa-col-title) y a la derecha dos <select> — sin
+   igualar su alto, la caja de la matriz derecha arrancaba más abajo que la
+   izquierda. .huella-cmp-head fuerza el mismo alto/margen en ambos lados
+   para que las dos cajas (.huella-cmp-card) queden alineadas arriba, y deja
+   los selectores a la misma altura que el texto de cabecera de la izquierda. */
+.huella-cmp-head { min-height:44px; margin-bottom:14px; box-sizing:border-box; }
+.mapa-col-title.huella-cmp-head { display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+.huella-cmp-selrow { align-items:center; }
+.huella-cmp-card { align-items:stretch; }
+/* Las matrices del comparador (46 sectores × 56 provincias) usan la misma
+   clase .mip-svg que las de "Matrices de insumo-producto locales" en el
+   Explorador — .huella-cmp-svg las agranda sólo a ellas, sin tocar esas otras. */
+.huella-cmp-svg { height:660px; }
+@media (max-width:900px) {
+  .huella-cmp-svg { height:auto; }
+}
+
 /* Aviso del comparador (#huellaCmpWarn): el par provincia-sector elegido en
    la matriz derecha coincide con la selección inicial, así que se bloqueó. */
 .huella-cmp-warn {
@@ -1861,6 +1879,7 @@ footer {
     <div class="sec-hd expl-detalle-hd">
       <div class="eyebrow">Estima tu Huella Económica</div>
       <h2 class="sec-title" id="huellaTitle">Estimación de impacto</h2>
+      <p class="expl-lead">¿Cómo se lee el número? Cada combinación de provincia y sector pesa distinto dentro de la economía chilena, y el modelo le aplica a todas el mismo aumento de productividad —un shock del 10%, igual para todas las celdas, para que los resultados sean comparables entre sí—. El valor que se muestra no es el efecto en bruto: es ese efecto dividido por el peso propio de la celda y por el tamaño del shock, es decir, cuántas veces el impacto en el país termina superando lo que el tamaño de esa celda por sí solo explicaría. Un valor de 1 significa que el efecto es proporcional al peso de la celda; por encima de 1 hay amplificación —el resto de la economía responde más de lo que ese tamaño haría esperar—.</p>
     </div>
 
     <div class="expl-subsec">
@@ -1911,15 +1930,15 @@ footer {
         </div>
       </div>
       <p class="expl-lead">Cada celda es una combinación provincia-sector, con el mismo dato que el mapa y el ránking de arriba. <b>Izquierda</b>: su selección inicial de provincia y sector. <b>Derecha</b>: elija cualquier otra provincia y sector para comparar. Pase el cursor sobre una celda para ver su valor y su lugar entre las 2.576 combinaciones del modelo.</p>
-      <div class="expl-map-row">
+      <div class="expl-map-row huella-cmp-row">
         <div class="mapa-col">
-          <div class="mapa-col-title" id="huellaCmpTitleA">Su selección</div>
-          <div class="rednet-card mip-card">
-            <svg id="huellaCmpSvgA" class="mip-svg"></svg>
+          <div class="mapa-col-title huella-cmp-head" id="huellaCmpTitleA">Su selección</div>
+          <div class="rednet-card mip-card huella-cmp-card">
+            <svg id="huellaCmpSvgA" class="mip-svg huella-cmp-svg"></svg>
           </div>
         </div>
         <div class="mapa-col">
-          <div class="frow2">
+          <div class="frow2 huella-cmp-head huella-cmp-selrow">
             <select id="huellaCmpProvIn" class="fctrl compsec-select mip-select">
               <option value="">Seleccione una provincia...</option>
             </select>
@@ -1928,8 +1947,8 @@ footer {
             </select>
           </div>
           <p class="huella-cmp-warn" id="huellaCmpWarn" hidden>Par provincia-sector ya seleccionado, por favor escoja otra opción</p>
-          <div class="rednet-card mip-card">
-            <svg id="huellaCmpSvgB" class="mip-svg"></svg>
+          <div class="rednet-card mip-card huella-cmp-card">
+            <svg id="huellaCmpSvgB" class="mip-svg huella-cmp-svg"></svg>
           </div>
         </div>
         <div class="mapa-legend">
@@ -4774,7 +4793,7 @@ function huellaCmpRenderPanel(svgEl, selCu, selCs, maxAbs) {
   const rows = PROV_SECT.sectores, cols = PROV_SECT.provincias;
   const nR = rows.length, nC = cols.length;
   const W = 960, H = 680;
-  const mL = 150, mB = 118, mT = 10, mR = 8;
+  const mL = 178, mB = 142, mT = 10, mR = 8; // margen ampliado para el font-size más grande de las etiquetas (fy)
   const gw = W - mL - mR, gh = H - mT - mB;
   const cell = Math.min(gw / nC, gh / nR);
   const gridW = cell * nC, gridH = cell * nR;
@@ -4811,7 +4830,7 @@ function huellaCmpRenderPanel(svgEl, selCu, selCs, maxAbs) {
       fill: 'none', stroke: HUELLA_CMP_SEL, 'stroke-width': '3', style: 'pointer-events:none'
     }));
   }
-  const fy = 7.4;
+  const fy = 10; // antes 7.4: ilegible a este tamaño de caja
   rows.forEach((s, i) => {
     const on = i === selR;
     const t = svgNode('text', { x: '-6', y: (i * cell + cell / 2).toFixed(1), dy: '0.32em', 'text-anchor': 'end', 'font-size': fy, 'font-weight': on ? '700' : '400', fill: on ? 'var(--hueso)' : 'var(--hueso60)' });
